@@ -74,15 +74,17 @@
 
   #gachaArea{padding:0 16px 12px;display:flex;gap:10px;}
   .gachaBtn{
-    flex:1;border:none;border-radius:16px;padding:13px 8px;cursor:pointer;
-    font-family:inherit;font-weight:800;font-size:15px;color:#12102b;
+    flex:1;border:none;border-radius:16px;padding:12px 4px;cursor:pointer;
+    font-family:inherit;font-weight:800;font-size:14px;color:#12102b;
     background:linear-gradient(135deg,var(--cyan),#7bffe0);
     box-shadow:0 4px 0 #1f8f77, 0 0 20px rgba(79,227,193,.3);
     transition:transform .08s, box-shadow .08s;
   }
   .gachaBtn.ten{background:linear-gradient(135deg,var(--magenta),#ff8fe0);box-shadow:0 4px 0 #94307b, 0 0 20px rgba(232,79,191,.3);}
+  .gachaBtn.hun{background:linear-gradient(135deg,var(--gold),#ffe9a8);box-shadow:0 4px 0 #a8781f, 0 0 20px rgba(255,201,79,.35);}
   .gachaBtn:active{transform:translateY(3px);box-shadow:0 1px 0 #1f8f77;}
   .gachaBtn.ten:active{box-shadow:0 1px 0 #94307b;}
+  .gachaBtn.hun:active{box-shadow:0 1px 0 #a8781f;}
   .gachaBtn:disabled{opacity:.4;filter:grayscale(.6);}
   .gachaBtn small{display:block;font-size:11px;font-weight:700;opacity:.75;margin-top:2px;}
 
@@ -163,7 +165,14 @@
   #resultWrap{display:none;flex-direction:column;align-items:center;gap:14px;max-width:340px;width:100%;}
   #resultWrap.show{display:flex;animation:burst .4s ease-out;}
   @keyframes burst{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}
-  .resGrid{display:grid;gap:10px;width:100%;justify-content:center;}
+  .resGrid{display:grid;gap:10px;width:100%;justify-content:center;max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:2px;}
+  .evoBtn{
+    margin-top:6px;border:none;border-radius:8px;padding:5px 8px;width:100%;
+    font-family:inherit;font-weight:800;font-size:10px;cursor:pointer;
+    background:linear-gradient(135deg,var(--gold),#ffe9a8);color:#2b2210;
+    animation:glowPulse 1.4s infinite;
+  }
+  @keyframes glowPulse{0%,100%{box-shadow:0 0 4px rgba(255,201,79,.4)}50%{box-shadow:0 0 14px rgba(255,201,79,.9)}}
   .resCard{
     background:var(--panel2);border:2px solid;border-radius:14px;padding:10px 6px;text-align:center;
     animation:burst .35s ease-out backwards;
@@ -198,8 +207,9 @@
       <div id="tapHint">タップしてDNAを採取</div>
     </div>
     <div id="gachaArea">
-      <button class="gachaBtn" id="pull1">召喚 ×1<small id="cost1"></small></button>
-      <button class="gachaBtn ten" id="pull10">召喚 ×10<small id="cost10"></small></button>
+      <button class="gachaBtn" id="pull1">召喚×1<small id="cost1"></small></button>
+      <button class="gachaBtn ten" id="pull10">召喚×10<small id="cost10"></small></button>
+      <button class="gachaBtn hun" id="pull100">召喚×100<small id="cost100"></small></button>
     </div>
   </section>
 
@@ -312,15 +322,19 @@ const SPECIES = [
   {id:"nyarvo", p:"p5", name:"ニャルヴォイド",rar:"UR", shape:"jelly", c1:"#bf8fff", c2:"#ffffff", eyes:3, tap:42, dps:21},
 ];
 const RATES = {N:60, R:30, SR:8, UR:2};
+const RARORDER = {N:0, R:1, SR:2, UR:3};
 const RARCOL = {N:"#8fa3b8", R:"#4fb7e3", SR:"#b57bff", UR:"#ffc94f"};
+const EVO_LV = 100;   // 進化可能になるレベル
+const EVO_MULT = 5;   // 進化後のステータス倍率
 
 const planetOf = id => PLANETS.find(p=>p.id===id);
 const speciesOf = id => SPECIES.find(s=>s.id===id);
-const effTap = sp => sp.tap * planetOf(sp.p).mult;
-const effDps = sp => sp.dps * planetOf(sp.p).mult;
+const evoMult = sp => (S.evolved && S.evolved[sp.id]) ? EVO_MULT : 1;
+const effTap = sp => sp.tap * planetOf(sp.p).mult * evoMult(sp);
+const effDps = sp => sp.dps * planetOf(sp.p).mult * evoMult(sp);
 
 /* ================= セーブデータ ================= */
-let S = { dna:50, owned:{ pico:1 }, partner:"pico", planet:"p1", unlocked:["p1"] };
+let S = { dna:50, owned:{ pico:1 }, partner:"pico", planet:"p1", unlocked:["p1"], evolved:{} };
 const KEY = "alien-clicker-save";
 
 // 保存先アダプタ: Claude Artifacts環境ではwindow.storage、
@@ -350,6 +364,7 @@ async function load(){
       // v1セーブからの移行
       if(!S.unlocked) S.unlocked = ["p1"];
       if(!S.planet) S.planet = "p1";
+      if(!S.evolved) S.evolved = {};
     }
   }catch(e){ /* 初回・破損時は初期状態で開始 */ }
 }
@@ -367,7 +382,7 @@ document.addEventListener("visibilitychange", ()=>{
 });
 
 /* ================= エイリアンSVG描画 ================= */
-function alienSVG(sp, size){
+function alienSVG(sp, size, evolved){
   const {shape,c1,c2,eyes} = sp;
   let body = "";
   if(shape==="round") body = `<ellipse cx="50" cy="55" rx="32" ry="30" fill="${c1}"/>`;
@@ -388,7 +403,11 @@ function alienSVG(sp, size){
       <circle cx="${x}" cy="${eyeY+1.5}" r="3.4" fill="#12102b"/>`;
   }
   const spot = `<circle cx="38" cy="68" r="3.5" fill="${c2}" opacity=".7"/><circle cx="60" cy="70" r="2.6" fill="${c2}" opacity=".7"/>`;
-  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}">${ant}${body}${eyeEls}${shape!=="squid"?spot:""}</svg>`;
+  const evo = evolved ? `<circle cx="50" cy="52" r="47" fill="none" stroke="#ffc94f" stroke-width="2.5" opacity=".85"/>
+    <path d="M13 22 l2.2 5.3 5.3 2.2 -5.3 2.2 -2.2 5.3 -2.2 -5.3 -5.3 -2.2 5.3 -2.2 z" fill="#ffd97b"/>
+    <path d="M86 14 l1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8 z" fill="#ffd97b"/>
+    <path d="M88 78 l1.4 3.4 3.4 1.4 -3.4 1.4 -1.4 3.4 -1.4 -3.4 -3.4 -1.4 3.4 -1.4 z" fill="#fff0c2"/>` : "";
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}">${ant}${body}${eyeEls}${shape!=="squid"?spot:""}${evo}</svg>`;
 }
 
 /* ================= 計算 ================= */
@@ -429,13 +448,16 @@ function refreshHeader(){
   $("tapNum").textContent = fmt(tapPower());
   $("cost1").textContent = fmt(pl.cost1) + " DNA";
   $("cost10").textContent = fmt(pl.cost1*9) + " DNA";
+  $("cost100").textContent = fmt(pl.cost1*80) + " DNA";
   $("pull1").disabled = S.dna < pl.cost1;
   $("pull10").disabled = S.dna < pl.cost1*9;
+  $("pull100").disabled = S.dna < pl.cost1*80;
 }
 function refreshPartner(){
   const sp = speciesOf(S.partner) || SPECIES[0];
-  $("alienBtn").innerHTML = alienSVG(sp, 220);
-  $("alienName").textContent = sp.name + "  Lv." + (S.owned[sp.id]||1);
+  const ev = !!S.evolved[sp.id];
+  $("alienBtn").innerHTML = alienSVG(sp, 220, ev);
+  $("alienName").textContent = (ev ? "★" : "") + sp.name + "  Lv." + (S.owned[sp.id]||1);
   const rEl = $("alienRarity");
   rEl.textContent = sp.rar;
   rEl.style.color = RARCOL[sp.rar];
@@ -460,12 +482,14 @@ function refreshDex(){
     grid.className = "dexGrid";
     for(const sp of list){
       const lv = S.owned[sp.id];
+      const ev = !!S.evolved[sp.id];
       const card = document.createElement("div");
       card.className = "card " + (lv ? "owned" : "locked") + (S.partner===sp.id ? " selected" : "");
-      card.innerHTML = alienSVG(sp, 56) +
-        `<div class="nm">${lv ? sp.name : "???"}</div>` +
+      card.innerHTML = alienSVG(sp, 56, lv && ev) +
+        `<div class="nm">${lv ? (ev ? "★" : "") + sp.name : "???"}</div>` +
         `<div class="rt r${sp.rar}">${sp.rar}</div>` +
-        (lv ? `<div class="lv">Lv.${lv}</div><div class="st">+${fmt(effTap(sp))}タップ / ${fmt(effDps(sp))}/s</div>` : `<div class="st">未発見</div>`);
+        (lv ? `<div class="lv">Lv.${lv}</div><div class="st">+${fmt(effTap(sp))}タップ / ${fmt(effDps(sp))}/s</div>` : `<div class="st">未発見</div>`) +
+        (lv >= EVO_LV && !ev ? `<button class="evoBtn" data-evo="${sp.id}">✨ 進化できる!</button>` : "");
       if(lv){
         card.onclick = ()=>{ S.partner = sp.id; save(); refreshPartner(); refreshDex(); };
       }
@@ -473,6 +497,9 @@ function refreshDex(){
     }
     body.appendChild(grid);
   }
+  body.querySelectorAll("[data-evo]").forEach(b=>{
+    b.onclick = (e)=>{ e.stopPropagation(); doEvolve(b.dataset.evo); };
+  });
   const lockedCnt = PLANETS.filter(p=>!S.unlocked.includes(p.id)).length;
   if(lockedCnt>0){
     const note = document.createElement("div");
@@ -565,7 +592,7 @@ function rollOne(){
 }
 function doGacha(n){
   const pl = curPlanet();
-  const cost = n===1 ? pl.cost1 : pl.cost1*9;
+  const cost = n===1 ? pl.cost1 : n===10 ? pl.cost1*9 : pl.cost1*80;
   if(S.dna < cost) return;
   S.dna -= cost;
   const results = [];
@@ -581,29 +608,65 @@ function doGacha(n){
 function showResults(results){
   const modal = $("modal");
   modal.classList.add("show");
+  $("modalTitle").textContent = "新たな生命体を検出!";
   $("capsulePhase").style.display = "block";
   $("resultWrap").classList.remove("show");
   setTimeout(()=>{
     $("capsulePhase").style.display = "none";
     const grid = $("resGrid");
     grid.innerHTML = "";
-    grid.style.gridTemplateColumns = results.length===1 ? "1fr" : "repeat(auto-fit, minmax(88px, 1fr))";
-    results.forEach((r,i)=>{
+    // 100連などの大量結果は種族ごとに集計して表示
+    let items;
+    if(results.length > 10){
+      const agg = {};
+      for(const r of results){
+        const a = agg[r.sp.id] || (agg[r.sp.id] = {sp:r.sp, count:0, isNew:false, lv:0});
+        a.count++; a.isNew = a.isNew || r.isNew; a.lv = Math.max(a.lv, r.lv);
+      }
+      items = Object.values(agg).sort((a,b)=>RARORDER[b.sp.rar]-RARORDER[a.sp.rar]);
+    }else{
+      items = results.map(r=>({sp:r.sp, count:1, isNew:r.isNew, lv:r.lv}));
+    }
+    grid.style.gridTemplateColumns = items.length===1 ? "1fr" : "repeat(auto-fit, minmax(88px, 1fr))";
+    items.forEach((r,i)=>{
       const c = document.createElement("div");
       c.className = "resCard";
       c.style.borderColor = RARCOL[r.sp.rar];
-      c.style.animationDelay = (i*0.08)+"s";
-      c.innerHTML = alienSVG(r.sp, results.length===1 ? 110 : 56) +
-        `<div class="nm">${r.sp.name}</div>` +
+      c.style.animationDelay = (Math.min(i,12)*0.06)+"s";
+      c.innerHTML = alienSVG(r.sp, items.length===1 ? 110 : 56) +
+        `<div class="nm">${r.sp.name}${r.count>1 ? " ×"+r.count : ""}</div>` +
         `<div class="tag" style="color:${RARCOL[r.sp.rar]}">${r.sp.rar}</div>` +
-        (r.isNew ? `<div class="new">✦ NEW!</div>` : `<div class="new" style="color:var(--dim)">Lv.${r.lv}に強化</div>`);
+        (r.isNew ? `<div class="new">✦ NEW!</div>` : `<div class="new" style="color:var(--dim)">Lv.${r.lv}</div>`);
       grid.appendChild(c);
     });
     $("resultWrap").classList.add("show");
   }, 1100);
 }
+function doEvolve(id){
+  const sp = speciesOf(id);
+  if(!sp || (S.owned[id]||0) < EVO_LV || S.evolved[id]) return;
+  S.evolved[id] = true;
+  save(); refreshAll();
+  // 進化演出
+  const modal = $("modal");
+  modal.classList.add("show");
+  $("capsulePhase").style.display = "none";
+  $("modalTitle").textContent = "✨ " + sp.name + " が進化した!";
+  const grid = $("resGrid");
+  grid.innerHTML = "";
+  grid.style.gridTemplateColumns = "1fr";
+  const c = document.createElement("div");
+  c.className = "resCard";
+  c.style.borderColor = "#ffc94f";
+  c.innerHTML = alienSVG(sp, 110, true) +
+    `<div class="nm">★${sp.name}</div>` +
+    `<div class="new">全ステータス ×${EVO_MULT}!</div>`;
+  grid.appendChild(c);
+  $("resultWrap").classList.add("show");
+}
 $("pull1").onclick = ()=>doGacha(1);
 $("pull10").onclick = ()=>doGacha(10);
+$("pull100").onclick = ()=>doGacha(100);
 $("closeModal").onclick = ()=>$("modal").classList.remove("show");
 
 /* ================= タブ ================= */
