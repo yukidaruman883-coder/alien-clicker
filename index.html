@@ -63,6 +63,9 @@
   #alienStage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;}
   #alienName{font-size:15px;font-weight:700;margin-bottom:2px;}
   #alienRarity{font-size:11px;margin-bottom:10px;letter-spacing:2px;font-weight:800;}
+  /* キャラがステージ内をゆっくり動き回るためのラッパー
+     (transformはJSで随時セット。durationもJS側で距離に応じて上書き) */
+  #alienWander{will-change:transform;transition:transform 4s ease-in-out;}
   #alienBtn{
     width:min(54vw,220px);height:min(54vw,220px);border:none;background:transparent;cursor:pointer;
     filter:drop-shadow(0 0 24px rgba(143,123,255,.45));
@@ -248,7 +251,7 @@
     <div id="alienStage">
       <div id="alienName">???</div>
       <div id="alienRarity"></div>
-      <button id="alienBtn" aria-label="エイリアンをタップ"></button>
+      <div id="alienWander"><button id="alienBtn" aria-label="エイリアンをタップ"></button></div>
       <div id="tapHint">タップしてDNAを採取</div>
     </div>
     <div id="gachaArea">
@@ -728,11 +731,48 @@ setInterval(()=>{
 // たまに気まぐれでぴょんと跳ねる
 setInterval(()=>{ if(Math.random() < 0.5) alienReact("hop", 650); }, 7000);
 
+/* ================= キャラの徘徊 ================= */
+// ステージ内のランダムな位置へ、一定速度でゆっくり移動し続ける
+const WANDER_SPEED = 28;        // px/秒 (小さいほどゆっくり)
+const WANDER_MARGIN = 8;        // ステージ端との余白px
+let wanderPausedUntil = 0;      // タップ後しばらく動きを止めるための時刻
+function wanderStep(){
+  // ホーム画面が非表示(display:none)だと寸法が取れないのでスキップ
+  if(!$("homeScreen").classList.contains("active")) return;
+  if(Date.now() < wanderPausedUntil) return;
+  const w = $("alienWander"), stage = $("alienStage");
+  // flex中央配置からの許容移動量を、実寸から計算
+  const maxX = Math.max(0, (stage.clientWidth - w.offsetWidth)/2 - WANDER_MARGIN);
+  const topRoom = Math.max(0, w.offsetTop - WANDER_MARGIN);
+  const botRoom = Math.max(0, stage.clientHeight - (w.offsetTop + w.offsetHeight) - WANDER_MARGIN);
+  const tx = (Math.random()*2 - 1) * maxX;
+  const ty = -topRoom + Math.random() * (topRoom + botRoom);
+  // 現在位置との距離から所要時間を出し、速度を一定に保つ
+  const m = new DOMMatrixReadOnly(getComputedStyle(w).transform);
+  const dist = Math.hypot(tx - m.m41, ty - m.m42);
+  const dur = Math.max(1.5, dist / WANDER_SPEED);
+  w.style.transitionDuration = dur.toFixed(2) + "s";
+  w.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px)`;
+}
+// タップされたらその場で静止し、しばらく待ってから再び動き出す
+function wanderFreeze(){
+  const w = $("alienWander");
+  const cur = getComputedStyle(w).transform;
+  w.style.transitionDuration = "0s";
+  w.style.transform = cur === "none" ? "translate(0,0)" : cur;
+  void w.offsetWidth; // transition:0sを即反映させるためのリフロー
+  w.style.transitionDuration = "";
+  wanderPausedUntil = Date.now() + 2500;
+}
+setInterval(wanderStep, 4500);
+setTimeout(wanderStep, 1200); // 起動直後にも一度動き出す
+
 /* ================= タップ ================= */
 $("alienBtn").addEventListener("pointerdown", e=>{
   const gain = tapPower();
   S.dna += gain;
   SFX.tap();
+  wanderFreeze(); // 連打しやすいよう、タップ中は移動を止める
   alienReact("squish", 340);
   save(); refreshHeader();
   // 指で隠れないよう、エイリアンの斜め上(左右ランダム)に数字を表示
