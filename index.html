@@ -71,6 +71,18 @@
   #alienBtn:active{transform:scale(.92);}
   #alienBtn svg{width:100%;height:100%;animation:float 3.2s ease-in-out infinite;}
   @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  /* ホームのキャラの生き物らしい動き(小さいカードには適用されないよう#alienBtn配下限定) */
+  #alienBtn .al{transform-box:view-box;transform-origin:50% 78%;animation:breathe 3.4s ease-in-out infinite;}
+  @keyframes breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.02,.965)}}
+  #alienBtn .ant{transform-box:view-box;transform-origin:50% 30%;animation:sway 2.6s ease-in-out infinite alternate;}
+  @keyframes sway{from{transform:rotate(-2.5deg)}to{transform:rotate(2.5deg)}}
+  #alienBtn .eyes{transform-box:view-box;transform-origin:50% 52%;animation:blink 4.3s infinite;}
+  @keyframes blink{0%,91%,100%{transform:scaleY(1)}94%,96%{transform:scaleY(.08)}}
+  #alienBtn .pupils{transition:transform .35s ease;}
+  #alienBtn svg.squish{animation:squish .32s ease-out;}
+  @keyframes squish{0%{transform:scale(1.07,.8)}55%{transform:scale(.95,1.07)}100%{transform:scale(1)}}
+  #alienBtn svg.hop{animation:hop .6s ease-out;}
+  @keyframes hop{0%{transform:translateY(0)}35%{transform:translateY(-24px) rotate(-4deg)}70%{transform:translateY(0)}85%{transform:translateY(-8px)}100%{transform:translateY(0)}}
   #tapHint{font-size:12px;color:var(--dim);margin-top:10px;}
   .pop{
     position:absolute;font-weight:800;color:var(--cyan);font-size:18px;pointer-events:none;
@@ -451,19 +463,20 @@ function alienSVG(sp, size, evolved){
       stroke="${c1}" stroke-width="7" fill="none" stroke-linecap="round"/>`;
   const ant = `<path d="M42 24 q-4 -12 -12 -14 M58 24 q4 -12 12 -14" stroke="${c2}" stroke-width="3.5" fill="none" stroke-linecap="round"/>
     <circle cx="30" cy="10" r="4" fill="${c2}"/><circle cx="70" cy="10" r="4" fill="${c2}"/>`;
-  let eyeEls = "";
+  let whites = "", pupils = "";
   const eyeY = shape==="squid" ? 44 : 52;
   const pos = eyes===1 ? [50] : eyes===2 ? [40,60] : [36,50,64];
   for(const x of pos){
-    eyeEls += `<ellipse cx="${x}" cy="${eyeY}" rx="6.5" ry="8" fill="#fff"/>
-      <circle cx="${x}" cy="${eyeY+1.5}" r="3.4" fill="#12102b"/>`;
+    whites += `<ellipse cx="${x}" cy="${eyeY}" rx="6.5" ry="8" fill="#fff"/>`;
+    pupils += `<circle cx="${x}" cy="${eyeY+1.5}" r="3.4" fill="#12102b"/>`;
   }
+  const eyeEls = `<g class="eyes">${whites}<g class="pupils">${pupils}</g></g>`;
   const spot = `<circle cx="38" cy="68" r="3.5" fill="${c2}" opacity=".7"/><circle cx="60" cy="70" r="2.6" fill="${c2}" opacity=".7"/>`;
   const evo = evolved ? `<circle cx="50" cy="52" r="47" fill="none" stroke="#ffc94f" stroke-width="2.5" opacity=".85"/>
     <path d="M13 22 l2.2 5.3 5.3 2.2 -5.3 2.2 -2.2 5.3 -2.2 -5.3 -5.3 -2.2 5.3 -2.2 z" fill="#ffd97b"/>
     <path d="M86 14 l1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8 z" fill="#ffd97b"/>
     <path d="M88 78 l1.4 3.4 3.4 1.4 -3.4 1.4 -1.4 3.4 -1.4 -3.4 -3.4 -1.4 3.4 -1.4 z" fill="#fff0c2"/>` : "";
-  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}">${ant}${body}${eyeEls}${shape!=="squid"?spot:""}${evo}</svg>`;
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}"><g class="al"><g class="ant">${ant}</g>${body}${eyeEls}${shape!=="squid"?spot:""}${evo}</g></svg>`;
 }
 
 /* ================= 計算 ================= */
@@ -695,11 +708,32 @@ function refreshAll(){
   refreshHeader(); refreshPartner(); refreshDex(); refreshPlanets(); refreshSkills();
 }
 
+/* ================= キャラのリアクション ================= */
+function alienReact(cls, dur){
+  const svg = $("alienBtn").querySelector("svg");
+  if(!svg) return;
+  svg.classList.remove("squish","hop");
+  void svg.offsetWidth; // 連打時にアニメを再トリガーするためのリフロー
+  svg.classList.add(cls);
+  setTimeout(()=>svg.classList.remove(cls), dur);
+}
+// ときどき瞳がキョロキョロ動く
+setInterval(()=>{
+  const p = $("alienBtn").querySelector(".pupils");
+  if(!p) return;
+  const dx = (Math.random()*5 - 2.5).toFixed(1);
+  const dy = (Math.random()*3 - 1).toFixed(1);
+  p.style.transform = `translate(${dx}px, ${dy}px)`;
+}, 2600);
+// たまに気まぐれでぴょんと跳ねる
+setInterval(()=>{ if(Math.random() < 0.5) alienReact("hop", 650); }, 7000);
+
 /* ================= タップ ================= */
 $("alienBtn").addEventListener("pointerdown", e=>{
   const gain = tapPower();
   S.dna += gain;
   SFX.tap();
+  alienReact("squish", 340);
   save(); refreshHeader();
   // 指で隠れないよう、エイリアンの斜め上(左右ランダム)に数字を表示
   const pop = document.createElement("div");
