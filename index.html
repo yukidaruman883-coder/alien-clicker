@@ -64,8 +64,11 @@
   #alienName{font-size:15px;font-weight:700;margin-bottom:2px;}
   #alienRarity{font-size:11px;margin-bottom:10px;letter-spacing:2px;font-weight:800;}
   /* キャラがステージ内をゆっくり動き回るためのラッパー
-     (transformはJSで随時セット。durationもJS側で距離に応じて上書き) */
-  #alienWander{will-change:transform;transition:transform 4s ease-in-out;}
+     (名前・レア度も中に入れて一緒に追従させる) */
+  #alienWander{
+    display:flex;flex-direction:column;align-items:center;
+    will-change:transform;transition:transform 4s ease-in-out;
+  }
   #alienBtn{
     width:min(54vw,220px);height:min(54vw,220px);border:none;background:transparent;cursor:pointer;
     filter:drop-shadow(0 0 24px rgba(143,123,255,.45));
@@ -74,17 +77,17 @@
   #alienBtn:active{transform:scale(.92);}
   #alienBtn svg{width:100%;height:100%;animation:float 3.2s ease-in-out infinite;}
   @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-  /* ホームのキャラの生き物らしい動き(小さいカードには適用されないよう#alienBtn配下限定) */
-  #alienBtn .al{transform-box:view-box;transform-origin:50% 78%;animation:breathe 3.4s ease-in-out infinite;}
+  /* ホーム・動物園のキャラの生き物らしい動き(小さいカードには適用されないよう限定) */
+  #alienBtn .al, .zooAl .al{transform-box:view-box;transform-origin:50% 78%;animation:breathe 3.4s ease-in-out infinite;}
   @keyframes breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.02,.965)}}
-  #alienBtn .ant{transform-box:view-box;transform-origin:50% 30%;animation:sway 2.6s ease-in-out infinite alternate;}
+  #alienBtn .ant, .zooAl .ant{transform-box:view-box;transform-origin:50% 30%;animation:sway 2.6s ease-in-out infinite alternate;}
   @keyframes sway{from{transform:rotate(-2.5deg)}to{transform:rotate(2.5deg)}}
-  #alienBtn .eyes{transform-box:view-box;transform-origin:50% 52%;animation:blink 4.3s infinite;}
+  #alienBtn .eyes, .zooAl .eyes{transform-box:view-box;transform-origin:50% 52%;animation:blink 4.3s infinite;}
   @keyframes blink{0%,91%,100%{transform:scaleY(1)}94%,96%{transform:scaleY(.08)}}
   #alienBtn .pupils{transition:transform .35s ease;}
-  #alienBtn svg.squish{animation:squish .32s ease-out;}
+  #alienBtn svg.squish, .zooAl svg.squish{animation:squish .32s ease-out;}
   @keyframes squish{0%{transform:scale(1.07,.8)}55%{transform:scale(.95,1.07)}100%{transform:scale(1)}}
-  #alienBtn svg.hop{animation:hop .6s ease-out;}
+  #alienBtn svg.hop, .zooAl svg.hop{animation:hop .6s ease-out;}
   @keyframes hop{0%{transform:translateY(0)}35%{transform:translateY(-24px) rotate(-4deg)}70%{transform:translateY(0)}85%{transform:translateY(-8px)}100%{transform:translateY(0)}}
   #tapHint{font-size:12px;color:var(--dim);margin-top:10px;}
   .pop{
@@ -199,6 +202,34 @@
   .sBuy:disabled{opacity:.4;filter:grayscale(.6);}
   .sBuy.maxed{background:transparent;color:var(--gold);border:1px solid var(--gold);}
 
+  /* 動物園 */
+  #zooScreen{display:none;flex-direction:column;overflow:hidden;}
+  #zooScreen.active{display:flex;}
+  #zooHead{font-size:13px;color:var(--dim);margin:8px 16px 8px;}
+  #zooField{
+    flex:1;position:relative;margin:0 12px;overflow:hidden;
+    background:var(--panel);border:1px solid #322a6b;border-radius:18px;
+    box-shadow:inset 0 0 30px rgba(0,0,0,.35);
+  }
+  .zooAl{
+    position:absolute;left:0;top:0;text-align:center;cursor:pointer;
+    will-change:transform;transition:transform 3.5s ease-in-out;
+    filter:drop-shadow(0 0 10px rgba(143,123,255,.35));
+  }
+  .zooAl svg{width:72px;height:72px;}
+  .zooAl .znm{font-size:10px;font-weight:700;color:var(--dim);margin-top:-2px;}
+  #zooPickWrap{padding:8px 12px 12px;}
+  #zooPickHead{font-size:11px;color:var(--dim);margin:0 2px 6px;}
+  #zooPickHead b{color:var(--cyan);}
+  #zooPick{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px;}
+  .zooCard{
+    flex:0 0 auto;width:74px;background:var(--panel);border:1px solid #322a6b;
+    border-radius:12px;padding:7px 4px 5px;text-align:center;cursor:pointer;
+  }
+  .zooCard.on{border-color:var(--cyan);box-shadow:0 0 10px rgba(79,227,193,.35);}
+  .zooCard svg{width:40px;height:40px;}
+  .zooCard .nm{font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
   /* ガチャ演出モーダル */
   #modal{
     position:fixed;inset:0;background:rgba(5,4,18,.92);z-index:10;
@@ -249,9 +280,11 @@
   <section class="screen active" id="homeScreen">
     <div id="planetBadge"></div>
     <div id="alienStage">
-      <div id="alienName">???</div>
-      <div id="alienRarity"></div>
-      <div id="alienWander"><button id="alienBtn" aria-label="エイリアンをタップ"></button></div>
+      <div id="alienWander">
+        <div id="alienName">???</div>
+        <div id="alienRarity"></div>
+        <button id="alienBtn" aria-label="エイリアンをタップ"></button>
+      </div>
       <div id="tapHint">タップしてDNAを採取</div>
     </div>
     <div id="gachaArea">
@@ -265,6 +298,16 @@
   <section class="screen" id="skillScreen">
     <div id="skillHead">研究ラボ — DNAを使って探査能力を強化しよう</div>
     <div id="skillList"></div>
+  </section>
+
+  <!-- 動物園 -->
+  <section class="screen" id="zooScreen">
+    <div id="zooHead">観察エリア — 仲間たちがのんびり暮らしています(タップすると跳ねるよ)</div>
+    <div id="zooField"></div>
+    <div id="zooPickWrap">
+      <div id="zooPickHead">放すエイリアンを選ぶ <b id="zooCount">0</b>/5</div>
+      <div id="zooPick"></div>
+    </div>
   </section>
 
   <!-- 図鑑 -->
@@ -284,6 +327,7 @@
   <button id="tabHome" class="active"><span class="ico">🛸</span>ホーム</button>
   <button id="tabPlanet"><span class="ico">🪐</span>惑星</button>
   <button id="tabSkill"><span class="ico">🧬</span>スキル</button>
+  <button id="tabZoo"><span class="ico">🛖</span>動物園</button>
   <button id="tabDex"><span class="ico">📖</span>図鑑</button>
 </nav>
 
@@ -404,7 +448,7 @@ const effTap = sp => sp.tap * planetOf(sp.p).mult * evoMult(sp);
 const effDps = sp => sp.dps * planetOf(sp.p).mult * evoMult(sp);
 
 /* ================= セーブデータ ================= */
-let S = { dna:50, owned:{ pico:1 }, partner:"pico", planet:"p1", unlocked:["p1"], evolved:{}, skills:{} };
+let S = { dna:50, owned:{ pico:1 }, partner:"pico", planet:"p1", unlocked:["p1"], evolved:{}, skills:{}, zoo:["pico"] };
 const KEY = "alien-clicker-save";
 
 // 保存先アダプタ: Claude Artifacts環境ではwindow.storage、
@@ -436,6 +480,7 @@ async function load(){
       if(!S.planet) S.planet = "p1";
       if(!S.evolved) S.evolved = {};
       if(!S.skills) S.skills = {};
+      if(!S.zoo) S.zoo = Object.keys(S.owned).slice(0,5); // 手持ちから最大5体を初期配置
     }
   }catch(e){ /* 初回・破損時は初期状態で開始 */ }
 }
@@ -767,6 +812,90 @@ function wanderFreeze(){
 setInterval(wanderStep, 4500);
 setTimeout(wanderStep, 1200); // 起動直後にも一度動き出す
 
+/* ================= 動物園 ================= */
+const ZOO_MAX = 5;
+const ZOO_SPEED = 32;   // px/秒
+let zooSprites = [];    // {el} フィールド上の個体
+function zooList(){     // 選択リストを手持ちのみに整えて返す
+  S.zoo = (S.zoo || []).filter(id => S.owned[id] && speciesOf(id)).slice(0, ZOO_MAX);
+  return S.zoo;
+}
+function zooMoveOne(s, instant){
+  const field = $("zooField");
+  const maxX = Math.max(0, field.clientWidth  - s.el.offsetWidth);
+  const maxY = Math.max(0, field.clientHeight - s.el.offsetHeight);
+  const x = Math.random()*maxX, y = Math.random()*maxY;
+  if(instant){
+    s.el.style.transitionDuration = "0s";
+  }else{
+    const m = new DOMMatrixReadOnly(getComputedStyle(s.el).transform);
+    const dist = Math.hypot(x - m.m41, y - m.m42);
+    s.el.style.transitionDuration = Math.max(1.5, dist/ZOO_SPEED).toFixed(2) + "s";
+  }
+  s.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+}
+function buildZooField(){
+  const field = $("zooField");
+  field.innerHTML = "";
+  zooSprites = [];
+  for(const id of zooList()){
+    const sp = speciesOf(id);
+    const el = document.createElement("div");
+    el.className = "zooAl";
+    el.innerHTML = alienSVG(sp, 72, !!S.evolved[id]) + `<div class="znm">${sp.name}</div>`;
+    // タップするとぴょんと跳ねる(なでる感覚のご褒美。DNAは増えない)
+    el.addEventListener("pointerdown", ()=>{
+      SFX.tap();
+      const svg = el.querySelector("svg");
+      svg.classList.remove("hop"); void svg.offsetWidth;
+      svg.classList.add("hop");
+      setTimeout(()=>svg.classList.remove("hop"), 650);
+    });
+    field.appendChild(el);
+    zooSprites.push({el});
+  }
+  // 初期位置はランダムに即時配置(画面が表示されてから呼ぶこと)
+  zooSprites.forEach(s => zooMoveOne(s, true));
+}
+function refreshZooPick(){
+  const pick = $("zooPick");
+  pick.innerHTML = "";
+  const list = zooList();
+  const ownedSpecies = SPECIES.filter(sp => S.owned[sp.id]);
+  for(const sp of ownedSpecies){
+    const on = list.includes(sp.id);
+    const c = document.createElement("div");
+    c.className = "zooCard" + (on ? " on" : "");
+    c.innerHTML = alienSVG(sp, 40, !!S.evolved[sp.id]) +
+      `<div class="nm">${sp.name}</div>` +
+      `<div class="rt r${sp.rar}" style="font-size:8px;font-weight:800">${sp.rar}</div>`;
+    c.onclick = ()=>{
+      if(on){
+        S.zoo = list.filter(id => id !== sp.id);
+      }else{
+        if(list.length >= ZOO_MAX) return; // 満員
+        S.zoo = [...list, sp.id];
+      }
+      SFX.tab();
+      save();
+      refreshZoo();
+    };
+    pick.appendChild(c);
+  }
+  $("zooCount").textContent = list.length;
+}
+function refreshZoo(){
+  refreshZooPick();
+  buildZooField();
+}
+// 各個体がバラバラのタイミングでのそのそ移動する
+setInterval(()=>{
+  if(!$("zooScreen").classList.contains("active")) return;
+  for(const s of zooSprites){
+    if(Math.random() < 0.6) zooMoveOne(s);
+  }
+}, 3800);
+
 /* ================= タップ ================= */
 $("alienBtn").addEventListener("pointerdown", e=>{
   const gain = tapPower();
@@ -888,7 +1017,7 @@ $("pull100").onclick = ()=>doGacha(100);
 $("closeModal").onclick = ()=>$("modal").classList.remove("show");
 
 /* ================= タブ ================= */
-const TABS = [["tabHome","homeScreen"],["tabPlanet","planetScreen"],["tabSkill","skillScreen"],["tabDex","dexScreen"]];
+const TABS = [["tabHome","homeScreen"],["tabPlanet","planetScreen"],["tabSkill","skillScreen"],["tabZoo","zooScreen"],["tabDex","dexScreen"]];
 for(const [tid,sid] of TABS){
   $(tid).onclick = ()=>{
     SFX.tab();
@@ -899,6 +1028,7 @@ for(const [tid,sid] of TABS){
     if(sid==="dexScreen") refreshDex();
     if(sid==="planetScreen") refreshPlanets();
     if(sid==="skillScreen") refreshSkills();
+    if(sid==="zooScreen") refreshZoo(); // 表示後に呼ぶ(寸法計算のため)
   };
 }
 
