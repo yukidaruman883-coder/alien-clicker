@@ -320,25 +320,48 @@ const effDps = sp => sp.dps * planetOf(sp.p).mult;
 let S = { dna:50, owned:{ pico:1 }, partner:"pico", planet:"p1", unlocked:["p1"] };
 const KEY = "alien-clicker-save";
 
+// 保存先アダプタ: Claude Artifacts環境ではwindow.storage、
+// 通常のブラウザ(GitHub Pagesなど)ではlocalStorageを使う
+const store = {
+  async get(k){
+    if(typeof window.storage !== "undefined" && window.storage){
+      try{ const r = await window.storage.get(k); return r ? r.value : null; }
+      catch(e){ return null; }
+    }
+    try{ return localStorage.getItem(k); }catch(e){ return null; }
+  },
+  async set(k, v){
+    if(typeof window.storage !== "undefined" && window.storage){
+      try{ await window.storage.set(k, v); return; }catch(e){}
+    }
+    try{ localStorage.setItem(k, v); }catch(e){}
+  }
+};
+
 async function load(){
   try{
-    const r = await window.storage.get(KEY);
-    if(r && r.value){
-      const d = JSON.parse(r.value);
+    const raw = await store.get(KEY);
+    if(raw){
+      const d = JSON.parse(raw);
       S = Object.assign(S, d);
       // v1セーブからの移行
       if(!S.unlocked) S.unlocked = ["p1"];
       if(!S.planet) S.planet = "p1";
     }
-  }catch(e){ /* 初回はキーが無い */ }
+  }catch(e){ /* 初回・破損時は初期状態で開始 */ }
+}
+async function persist(){
+  try{ await store.set(KEY, JSON.stringify(S)); }catch(e){}
 }
 let saveTimer = null;
 function save(){
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(async ()=>{
-    try{ await window.storage.set(KEY, JSON.stringify(S)); }catch(e){}
-  }, 800);
+  saveTimer = setTimeout(persist, 800);
 }
+// アプリを閉じる/バックグラウンドに回った瞬間に即時保存(モバイル対策)
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "hidden") persist();
+});
 
 /* ================= エイリアンSVG描画 ================= */
 function alienSVG(sp, size){
