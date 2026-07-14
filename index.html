@@ -154,6 +154,30 @@
   .lockReq .ok{color:var(--cyan);}
   .lockReq .ng{color:#ff7b7b;}
 
+  /* スキル画面 */
+  #skillScreen{padding:6px 14px 14px;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;}
+  #skillScreen.active{display:block;}
+  #skillHead{font-size:13px;color:var(--dim);margin:6px 2px 12px;}
+  .sCard{
+    background:var(--panel);border:1px solid #322a6b;border-radius:18px;
+    padding:14px;margin-bottom:12px;display:flex;gap:14px;align-items:center;
+  }
+  .sCard .sIco{font-size:32px;flex-shrink:0;width:48px;text-align:center;}
+  .sCard .info{flex:1;min-width:0;}
+  .sCard .sname{font-size:15px;font-weight:800;}
+  .sCard .sname .slv{font-size:11px;color:var(--gold);margin-left:6px;}
+  .sCard .sdesc{font-size:11px;color:var(--dim);margin-top:2px;}
+  .sCard .seff{font-size:11px;margin-top:6px;}
+  .sCard .seff b{color:var(--cyan);}
+  .sBuy{
+    border:none;border-radius:12px;padding:10px 12px;font-family:inherit;font-weight:800;
+    font-size:12px;cursor:pointer;flex-shrink:0;background:var(--cyan);color:#12102b;
+    line-height:1.4;text-align:center;
+  }
+  .sBuy small{display:block;font-size:10px;font-weight:700;opacity:.75;}
+  .sBuy:disabled{opacity:.4;filter:grayscale(.6);}
+  .sBuy.maxed{background:transparent;color:var(--gold);border:1px solid var(--gold);}
+
   /* ガチャ演出モーダル */
   #modal{
     position:fixed;inset:0;background:rgba(5,4,18,.92);z-index:10;
@@ -213,6 +237,12 @@
     </div>
   </section>
 
+  <!-- スキル -->
+  <section class="screen" id="skillScreen">
+    <div id="skillHead">研究ラボ — DNAを使って探査能力を強化しよう</div>
+    <div id="skillList"></div>
+  </section>
+
   <!-- 図鑑 -->
   <section class="screen" id="dexScreen">
     <div id="dexHead">発見数 <b id="dexCount">0</b> / <span id="dexTotal">0</span> 種 — タップで相棒に設定</div>
@@ -229,6 +259,7 @@
 <nav>
   <button id="tabHome" class="active"><span class="ico">🛸</span>ホーム</button>
   <button id="tabPlanet"><span class="ico">🪐</span>惑星</button>
+  <button id="tabSkill"><span class="ico">🧬</span>スキル</button>
   <button id="tabDex"><span class="ico">📖</span>図鑑</button>
 </nav>
 
@@ -327,6 +358,21 @@ const RARCOL = {N:"#8fa3b8", R:"#4fb7e3", SR:"#b57bff", UR:"#ffc94f"};
 const EVO_LV = 100;   // 進化可能になるレベル
 const EVO_MULT = 5;   // 進化後のステータス倍率
 
+/* ================= スキル定義 ================= */
+// cost = base × growth^現在Lv (レベルごとに指数的に高くなる)
+const SKILLS = [
+  {id:"tap",  ico:"👆", name:"タップ増幅",   desc:"タップ収益が2倍になる",             max:8, base:500,  growth:12,
+   eff:lv=>`タップ ×${fmt(Math.pow(2,lv))}`},
+  {id:"dps",  ico:"⚙️", name:"自動採取強化", desc:"自動採取の速度が2倍になる",         max:8, base:800,  growth:12,
+   eff:lv=>`自動採取 ×${fmt(Math.pow(2,lv))}`},
+  {id:"disc", ico:"💎", name:"召喚割引",     desc:"ガチャのコストが5%ずつ下がる",      max:5, base:2000, growth:10,
+   eff:lv=>`コスト -${5*lv}%`},
+  {id:"luck", ico:"🍀", name:"銀河の幸運",   desc:"SR排出率+1% / UR排出率+0.5%ずつ上昇", max:4, base:5000, growth:20,
+   eff:lv=>`SR ${8+lv}% / UR ${2+0.5*lv}%`},
+];
+const skillLv = id => (S.skills && S.skills[id]) || 0;
+const skillCost = sk => Math.floor(sk.base * Math.pow(sk.growth, skillLv(sk.id)));
+
 const planetOf = id => PLANETS.find(p=>p.id===id);
 const speciesOf = id => SPECIES.find(s=>s.id===id);
 const evoMult = sp => (S.evolved && S.evolved[sp.id]) ? EVO_MULT : 1;
@@ -334,7 +380,7 @@ const effTap = sp => sp.tap * planetOf(sp.p).mult * evoMult(sp);
 const effDps = sp => sp.dps * planetOf(sp.p).mult * evoMult(sp);
 
 /* ================= セーブデータ ================= */
-let S = { dna:50, owned:{ pico:1 }, partner:"pico", planet:"p1", unlocked:["p1"], evolved:{} };
+let S = { dna:50, owned:{ pico:1 }, partner:"pico", planet:"p1", unlocked:["p1"], evolved:{}, skills:{} };
 const KEY = "alien-clicker-save";
 
 // 保存先アダプタ: Claude Artifacts環境ではwindow.storage、
@@ -365,6 +411,7 @@ async function load(){
       if(!S.unlocked) S.unlocked = ["p1"];
       if(!S.planet) S.planet = "p1";
       if(!S.evolved) S.evolved = {};
+      if(!S.skills) S.skills = {};
     }
   }catch(e){ /* 初回・破損時は初期状態で開始 */ }
 }
@@ -417,7 +464,7 @@ function tapPower(){
     const sp = speciesOf(id); if(!sp) continue;
     p += effTap(sp) * (1 + (S.owned[id]-1)*0.2);
   }
-  return Math.round(p);
+  return Math.round(p * Math.pow(2, skillLv("tap")));
 }
 function totalDps(){
   let d = 0;
@@ -425,7 +472,7 @@ function totalDps(){
     const sp = speciesOf(id); if(!sp) continue;
     d += effDps(sp) * (1 + (S.owned[id]-1)*0.2);
   }
-  return d;
+  return d * Math.pow(2, skillLv("dps"));
 }
 function discoveredOn(pid){
   return SPECIES.filter(s=>s.p===pid && S.owned[s.id]).length;
@@ -441,17 +488,22 @@ function fmt(n){
 const $ = id => document.getElementById(id);
 function curPlanet(){ return planetOf(S.planet); }
 
+function gachaCost(n){
+  const pl = curPlanet();
+  const base = n===1 ? pl.cost1 : n===10 ? pl.cost1*9 : pl.cost1*80;
+  return Math.ceil(base * (1 - 0.05 * skillLv("disc")));
+}
 function refreshHeader(){
   const pl = curPlanet();
   $("dnaNum").textContent = fmt(S.dna);
   $("dpsNum").textContent = fmt(totalDps()) ;
   $("tapNum").textContent = fmt(tapPower());
-  $("cost1").textContent = fmt(pl.cost1) + " DNA";
-  $("cost10").textContent = fmt(pl.cost1*9) + " DNA";
-  $("cost100").textContent = fmt(pl.cost1*80) + " DNA";
-  $("pull1").disabled = S.dna < pl.cost1;
-  $("pull10").disabled = S.dna < pl.cost1*9;
-  $("pull100").disabled = S.dna < pl.cost1*80;
+  $("cost1").textContent = fmt(gachaCost(1)) + " DNA";
+  $("cost10").textContent = fmt(gachaCost(10)) + " DNA";
+  $("cost100").textContent = fmt(gachaCost(100)) + " DNA";
+  $("pull1").disabled = S.dna < gachaCost(1);
+  $("pull10").disabled = S.dna < gachaCost(10);
+  $("pull100").disabled = S.dna < gachaCost(100);
 }
 function refreshPartner(){
   const sp = speciesOf(S.partner) || SPECIES[0];
@@ -559,8 +611,40 @@ function refreshPlanets(){
     };
   });
 }
+function refreshSkills(){
+  const list = $("skillList");
+  list.innerHTML = "";
+  for(const sk of SKILLS){
+    const lv = skillLv(sk.id);
+    const maxed = lv >= sk.max;
+    const cost = skillCost(sk);
+    const card = document.createElement("div");
+    card.className = "sCard";
+    card.innerHTML = `
+      <div class="sIco">${sk.ico}</div>
+      <div class="info">
+        <div class="sname">${sk.name}<span class="slv">Lv.${lv}/${sk.max}</span></div>
+        <div class="sdesc">${sk.desc}</div>
+        <div class="seff">現在 <b>${sk.eff(lv)}</b>${maxed ? "" : ` → 次 <b>${sk.eff(lv+1)}</b>`}</div>
+      </div>` +
+      (maxed
+        ? `<button class="sBuy maxed" disabled>MAX</button>`
+        : `<button class="sBuy" data-skill="${sk.id}" ${S.dna >= cost ? "" : "disabled"}>強化<small>${fmt(cost)} DNA</small></button>`);
+    list.appendChild(card);
+  }
+  list.querySelectorAll("[data-skill]").forEach(b=>{
+    b.onclick = ()=>{
+      const sk = SKILLS.find(s=>s.id===b.dataset.skill);
+      const cost = skillCost(sk);
+      if(S.dna < cost || skillLv(sk.id) >= sk.max) return;
+      S.dna -= cost;
+      S.skills[sk.id] = skillLv(sk.id) + 1;
+      save(); refreshAll();
+    };
+  });
+}
 function refreshAll(){
-  refreshHeader(); refreshPartner(); refreshDex(); refreshPlanets();
+  refreshHeader(); refreshPartner(); refreshDex(); refreshPlanets(); refreshSkills();
 }
 
 /* ================= タップ ================= */
@@ -568,31 +652,38 @@ $("alienBtn").addEventListener("pointerdown", e=>{
   const gain = tapPower();
   S.dna += gain;
   save(); refreshHeader();
+  // 指で隠れないよう、エイリアンの斜め上(左右ランダム)に数字を表示
   const pop = document.createElement("div");
   pop.className = "pop";
   pop.textContent = "+" + fmt(gain);
   const stage = $("alienStage");
   const rect = stage.getBoundingClientRect();
-  pop.style.left = (e.clientX - rect.left - 12 + (Math.random()*24-12)) + "px";
-  pop.style.top  = (e.clientY - rect.top - 30) + "px";
+  const btn = $("alienBtn").getBoundingClientRect();
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const x = (btn.left - rect.left) + btn.width/2 + side * btn.width * 0.48 + (Math.random()*20 - 10);
+  const y = (btn.top - rect.top) - 14 + (Math.random()*16);
+  pop.style.left = x + "px";
+  pop.style.top  = y + "px";
   stage.appendChild(pop);
   setTimeout(()=>pop.remove(), 800);
 });
 
 /* ================= ガチャ ================= */
 function rollOne(){
+  const luck = skillLv("luck");
+  const rates = {UR: 2 + 0.5*luck, SR: 8 + 1*luck, R: 30};
+  rates.N = 100 - rates.UR - rates.SR - rates.R;
   const r = Math.random()*100;
   let rar = "N", acc = 0;
   for(const k of ["UR","SR","R","N"]){
-    acc += RATES[k];
+    acc += rates[k];
     if(r < acc){ rar = k; break; }
   }
   const pool = SPECIES.filter(s=>s.p===S.planet && s.rar===rar);
   return pool[Math.floor(Math.random()*pool.length)];
 }
 function doGacha(n){
-  const pl = curPlanet();
-  const cost = n===1 ? pl.cost1 : n===10 ? pl.cost1*9 : pl.cost1*80;
+  const cost = gachaCost(n);
   if(S.dna < cost) return;
   S.dna -= cost;
   const results = [];
@@ -670,7 +761,7 @@ $("pull100").onclick = ()=>doGacha(100);
 $("closeModal").onclick = ()=>$("modal").classList.remove("show");
 
 /* ================= タブ ================= */
-const TABS = [["tabHome","homeScreen"],["tabPlanet","planetScreen"],["tabDex","dexScreen"]];
+const TABS = [["tabHome","homeScreen"],["tabPlanet","planetScreen"],["tabSkill","skillScreen"],["tabDex","dexScreen"]];
 for(const [tid,sid] of TABS){
   $(tid).onclick = ()=>{
     for(const [t,s] of TABS){
@@ -679,6 +770,7 @@ for(const [tid,sid] of TABS){
     }
     if(sid==="dexScreen") refreshDex();
     if(sid==="planetScreen") refreshPlanets();
+    if(sid==="skillScreen") refreshSkills();
   };
 }
 
@@ -686,6 +778,13 @@ for(const [tid,sid] of TABS){
 setInterval(()=>{
   const d = totalDps();
   if(d>0){ S.dna += d/10; refreshHeader(); }
+  // スキル画面を開いている間はボタンの押下可否も追従させる
+  if($("skillScreen").classList.contains("active")){
+    document.querySelectorAll("[data-skill]").forEach(b=>{
+      const sk = SKILLS.find(s=>s.id===b.dataset.skill);
+      if(sk) b.disabled = S.dna < skillCost(sk);
+    });
+  }
 }, 100);
 setInterval(save, 5000);
 
