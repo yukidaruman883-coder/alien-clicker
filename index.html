@@ -42,6 +42,12 @@
   .dna .unit{font-size:12px;color:var(--dim);}
   .dps{font-size:11px;color:var(--dim);text-align:right;line-height:1.5;}
   .dps b{color:var(--magenta);font-weight:700;}
+  .hRight{display:flex;align-items:center;gap:10px;}
+  #sndBtn{
+    width:34px;height:34px;border-radius:50%;border:1px solid #322a6b;
+    background:var(--panel);font-size:15px;cursor:pointer;padding:0;
+  }
+  #sndBtn.off{opacity:.45;filter:grayscale(1);}
 
   main{position:relative;z-index:1;flex:1;overflow:hidden;display:flex;flex-direction:column;}
   .screen{flex:1;display:none;flex-direction:column;overflow:hidden;}
@@ -217,7 +223,10 @@
 
 <header>
   <div class="dna"><span class="num" id="dnaNum">0</span><span class="unit">DNA</span></div>
-  <div class="dps">自動採取 <b id="dpsNum">0</b>/秒<br>タップ +<span id="tapNum">1</span></div>
+  <div class="hRight">
+    <button id="sndBtn" aria-label="サウンド切替">🔊</button>
+    <div class="dps">自動採取 <b id="dpsNum">0</b>/秒<br>タップ +<span id="tapNum">1</span></div>
+  </div>
 </header>
 
 <main>
@@ -484,6 +493,43 @@ function fmt(n){
   return Math.floor(n).toString();
 }
 
+/* ================= 効果音 (Web Audio APIで合成、音声ファイル不要) ================= */
+let AC = null;
+function audioCtx(){
+  if(!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+  if(AC.state === "suspended") AC.resume();
+  return AC;
+}
+// 単音を鳴らす: freq=周波数, dur=長さ秒, slide=指定周波数へ滑らせる
+function tone(freq, dur, type="sine", vol=0.12, delay=0, slide=0){
+  if(S.muted) return;
+  try{
+    const ac = audioCtx();
+    const t0 = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t0);
+    if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(slide, 1), t0 + dur);
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }catch(e){}
+}
+const SFX = {
+  tap(){ tone(900 + Math.random()*260, 0.07, "square", 0.05, 0, 1500); },            // ピッ
+  gachaStart(){ tone(220, 0.5, "sawtooth", 0.07, 0, 990); },                          // シュイーン
+  reveal(rar){                                                                        // 結果表示(レア度で豪華に)
+    if(rar==="UR")      [660,880,1109,1319,1760].forEach((f,i)=>tone(f, 0.4, "triangle", 0.12, i*0.09));
+    else if(rar==="SR") [660,880,1109].forEach((f,i)=>tone(f, 0.28, "triangle", 0.1, i*0.08));
+    else { tone(660, 0.15, "triangle", 0.09); tone(990, 0.2, "triangle", 0.09, 0.08); }
+  },
+  buy(){ tone(523, 0.1, "square", 0.08); tone(784, 0.14, "square", 0.08, 0.09); },    // 強化ピロッ
+  evolve(){ [523,659,784,1046,1319].forEach((f,i)=>tone(f, 0.45, "triangle", 0.12, i*0.1)); }, // 進化ファンファーレ
+  unlock(){ [392,523,659,784].forEach((f,i)=>tone(f, 0.35, "triangle", 0.12, i*0.1)); tone(1046, 0.7, "triangle", 0.12, 0.42); }, // 開拓
+  tab(){ tone(440, 0.05, "sine", 0.035); },                                           // タブ切替
+};
+
 /* ================= UI更新 ================= */
 const $ = id => document.getElementById(id);
 function curPlanet(){ return planetOf(S.planet); }
@@ -598,7 +644,7 @@ function refreshPlanets(){
   });
   // イベント
   list.querySelectorAll("[data-go]").forEach(b=>{
-    b.onclick = ()=>{ S.planet = b.dataset.go; save(); refreshAll(); };
+    b.onclick = ()=>{ S.planet = b.dataset.go; SFX.tab(); save(); refreshAll(); };
   });
   list.querySelectorAll("[data-unlock]").forEach(b=>{
     b.onclick = ()=>{
@@ -607,6 +653,7 @@ function refreshPlanets(){
       S.dna -= pl.unlock.cost;
       S.unlocked.push(pl.id);
       S.planet = pl.id;
+      SFX.unlock();
       save(); refreshAll();
     };
   });
@@ -639,6 +686,7 @@ function refreshSkills(){
       if(S.dna < cost || skillLv(sk.id) >= sk.max) return;
       S.dna -= cost;
       S.skills[sk.id] = skillLv(sk.id) + 1;
+      SFX.buy();
       save(); refreshAll();
     };
   });
@@ -651,6 +699,7 @@ function refreshAll(){
 $("alienBtn").addEventListener("pointerdown", e=>{
   const gain = tapPower();
   S.dna += gain;
+  SFX.tap();
   save(); refreshHeader();
   // 指で隠れないよう、エイリアンの斜め上(左右ランダム)に数字を表示
   const pop = document.createElement("div");
@@ -702,7 +751,10 @@ function showResults(results){
   $("modalTitle").textContent = "新たな生命体を検出!";
   $("capsulePhase").style.display = "block";
   $("resultWrap").classList.remove("show");
+  SFX.gachaStart();
+  const best = results.reduce((m,r)=>RARORDER[r.sp.rar] > RARORDER[m] ? r.sp.rar : m, "N");
   setTimeout(()=>{
+    SFX.reveal(best);
     $("capsulePhase").style.display = "none";
     const grid = $("resGrid");
     grid.innerHTML = "";
@@ -737,6 +789,7 @@ function doEvolve(id){
   const sp = speciesOf(id);
   if(!sp || (S.owned[id]||0) < EVO_LV || S.evolved[id]) return;
   S.evolved[id] = true;
+  SFX.evolve();
   save(); refreshAll();
   // 進化演出
   const modal = $("modal");
@@ -764,6 +817,7 @@ $("closeModal").onclick = ()=>$("modal").classList.remove("show");
 const TABS = [["tabHome","homeScreen"],["tabPlanet","planetScreen"],["tabSkill","skillScreen"],["tabDex","dexScreen"]];
 for(const [tid,sid] of TABS){
   $(tid).onclick = ()=>{
+    SFX.tab();
     for(const [t,s] of TABS){
       $(t).classList.toggle("active", t===tid);
       $(s).classList.toggle("active", s===sid);
@@ -773,6 +827,18 @@ for(const [tid,sid] of TABS){
     if(sid==="skillScreen") refreshSkills();
   };
 }
+
+/* ================= サウンドON/OFF ================= */
+function refreshSndBtn(){
+  $("sndBtn").textContent = S.muted ? "🔇" : "🔊";
+  $("sndBtn").classList.toggle("off", !!S.muted);
+}
+$("sndBtn").onclick = ()=>{
+  S.muted = !S.muted;
+  refreshSndBtn();
+  if(!S.muted) SFX.buy(); // ONにした時に確認音
+  save();
+};
 
 /* ================= 自動採取ループ ================= */
 setInterval(()=>{
@@ -801,7 +867,7 @@ setInterval(save, 5000);
 })();
 
 /* ================= 起動 ================= */
-load().then(refreshAll);
+load().then(()=>{ refreshAll(); refreshSndBtn(); });
 </script>
 </body>
 </html>
